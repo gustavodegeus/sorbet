@@ -2270,14 +2270,20 @@ uint32_t TypeParameter::hash(const GlobalState &gs) const {
 
 uint32_t Method::methodShapeHash(const GlobalState &gs) const {
     uint32_t result = _hash(name.shortName(gs));
+    // TODO(jez) Some flags we can put into the shape, some flags we can't
     result = mix(result, this->flags.serialize());
     result = mix(result, this->owner.id());
+    // TODO(jez) I think we can probably drop rebind even without Namer::runIncremental?
     result = mix(result, this->rebind.id());
     result = mix(result, this->hasSig());
-    for (auto &arg : this->methodArgumentHash(gs)) {
-        result = mix(result, arg);
-    }
+    // TODO(jez) Pretty sure this is sufficient? This should effectively ignore argument names/order
+    // for (auto &arg : this->methodArgumentHash(gs)) {
+    //     result = mix(result, arg);
+    // }
 
+    // TODO(jez) Double check that your changes preserve the unresolvedAncestors behavior
+    // TODO(jez) Are there other synthetic methods like this that don't get a FoundDefinitionRef but
+    // still end up in the symbol table? T::Enum subclasses?
     if (name == core::Names::unresolvedAncestors()) {
         // This is a synthetic method that encodes the superclasses of its owning class in its return type.
         // If the return type changes, we must take the slow path.
