@@ -2276,10 +2276,9 @@ uint32_t Method::methodShapeHash(const GlobalState &gs) const {
     // TODO(jez) I think we can probably drop rebind even without Namer::runIncremental?
     result = mix(result, this->rebind.id());
     result = mix(result, this->hasSig());
-    // TODO(jez) Pretty sure this is sufficient? This should effectively ignore argument names/order
-    // for (auto &arg : this->methodArgumentHash(gs)) {
-    //     result = mix(result, arg);
-    // }
+    for (auto &arg : this->methodArgumentHash(gs)) {
+        result = mix(result, arg);
+    }
 
     // TODO(jez) Double check that your changes preserve the unresolvedAncestors behavior
     // TODO(jez) Are there other synthetic methods like this that don't get a FoundDefinitionRef but

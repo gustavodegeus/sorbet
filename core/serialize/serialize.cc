@@ -255,7 +255,7 @@ void SerializerImpl::pickle(Pickler &p, shared_ptr<const FileHash> fh) {
     }
     p.putU4(fh->foundDefinitionHashes.size());
     for (const auto &fdh : fh->foundDefinitionHashes) {
-        p.putU4(fdh.owner.rawStorage());
+        p.putU4(fdh.definition.rawStorage());
         p.putU4(fdh.owner.rawStorage());
         p.putU4(fdh.hash._hashValue);
     }

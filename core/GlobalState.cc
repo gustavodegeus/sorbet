@@ -2173,9 +2173,14 @@ unique_ptr<LocalSymbolTableHashes> GlobalState::hash() const {
         if (!sym.ignoreInHashing(*this)) {
             auto &target = methodHashesMap[ShortNameHash(*this, sym.name)];
             target = mix(target, sym.hash(*this));
-            uint32_t symhash = sym.methodShapeHash(*this);
-            hierarchyHash = mix(hierarchyHash, symhash);
-            methodHash = mix(methodHash, symhash);
+            // TODO(jez) Have to figure out whether all the flags do the right thing (maybe just
+            // reset them in namer?)
+            if (sym.name == core::Names::unresolvedAncestors()) {
+                uint32_t symhash = sym.methodShapeHash(*this);
+                hierarchyHash = mix(hierarchyHash, symhash);
+                methodHash = mix(methodHash, symhash);
+            }
+
             counter++;
             if (DEBUG_HASHING_TAIL && counter > this->methods.size() - 15) {
                 errorQueue->logger.info("Hashing method symbols: {}, {}", hierarchyHash, sym.name.show(*this));
