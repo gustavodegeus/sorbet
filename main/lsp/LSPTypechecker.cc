@@ -261,15 +261,16 @@ vector<core::FileRef> LSPTypechecker::runFastPath(LSPFileUpdates &updates, Worke
                 const auto &oldMethodHashes = fref.data(*gs).getFileHash()->localSymbolTableHashes.methodHashes;
                 const auto &newMethodHashes = updatedFile->getFileHash()->localSymbolTableHashes.methodHashes;
 
+                // TODO(jez) is this critical for the set_difference to work, or just a sanity check?
                 // Both oldHash and newHash should have the same methods, since this is the fast path!
-                ENFORCE(validateMethodHashesHaveSameMethods(oldMethodHashes, newMethodHashes),
+                ENFORCE(true || validateMethodHashesHaveSameMethods(oldMethodHashes, newMethodHashes),
                         "definitionHash should have failed");
 
                 // Find which hashes changed. Note: methodHashes are sorted, so set_difference should work.
                 // This will insert two entries into `changedMethodHashes` for each changed method, but they will get
                 // deduped later.
-                set_difference(oldMethodHashes.begin(), oldMethodHashes.end(), newMethodHashes.begin(),
-                               newMethodHashes.end(), std::back_inserter(changedMethodHashes));
+                set_symmetric_difference(oldMethodHashes.begin(), oldMethodHashes.end(), newMethodHashes.begin(),
+                                         newMethodHashes.end(), std::back_inserter(changedMethodHashes));
 
                 // Okay to `move` here (steals component of getFileHash) because we're about to use
                 // replaceFile to clobber fref.data(*gs) anyways.

@@ -1118,6 +1118,7 @@ class SymbolDefiner {
         ENFORCE(oldDefHash.owner.kind() == core::FoundDefinitionRef::Kind::Class,
                 "method that was not owned by class?");
         ENFORCE(oldDefHash.hash.isDefined(), "Can't mangle rename if old hash is not defined");
+        ctx.state.tracer().debug("yep 🙂");
 
         // Because a change to classes would have take the slow path, should be safe
         // to look up old owner in current foundDefs.
@@ -1162,6 +1163,8 @@ public:
         size_t currentIdx = 0;
         while (currentIdx < currentFoundDefs.size()) {
             auto currentDef = currentFoundDefs[currentIdx];
+            ctx.state.tracer().debug("Namer::runIncremental: currentIdx={}, currentDef={}", currentIdx,
+                                     currentDef.toString(ctx, foundDefs));
             currentIdx++;
 
             if (oldFoundDefinitionHashes.has_value()) {
@@ -1171,6 +1174,8 @@ public:
                 if (currentDef.kind() != core::FoundDefinitionRef::Kind::Method) {
                     while (oldIdx < oldFoundHashes.size()) {
                         auto &oldDefHash = oldFoundHashes[oldIdx];
+                        ctx.state.tracer().debug("Namer::runIncremental: oldIdx={}, oldDefHash kind()={}", oldIdx,
+                                                 core::FoundDefinitionRef::kindToString(oldDefHash.definition.kind()));
                         oldIdx++;
                         if (oldDefHash.definition.kind() == currentDef.kind()) {
                             break;
@@ -1181,6 +1186,8 @@ public:
                     auto currentFullNameHash = core::FullNameHash(ctx, currentDef.method(foundDefs).name);
                     while (oldIdx < oldFoundHashes.size()) {
                         auto &oldDefHash = oldFoundHashes[oldIdx];
+                        ctx.state.tracer().debug("Namer::runIncremental: oldIdx={}, oldDefHash kind()={}", oldIdx,
+                                                 core::FoundDefinitionRef::kindToString(oldDefHash.definition.kind()));
                         oldIdx++;
 
                         if (oldDefHash.definition.kind() != currentDef.kind()) {

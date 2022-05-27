@@ -2187,6 +2187,7 @@ uint32_t ClassOrModule::hash(const GlobalState &gs) const {
     if (!members().empty()) {
         // Rather than use membersStableOrderSlow, which is... slow..., use an order dictated by symbol ref ID.
         // It's faster to sort, and SymbolRef IDs are stable during hashing.
+        // TODO(jez) Why is this necessary, if everything already hashes its owner?
         vector<core::SymbolRef> membersToHash;
         membersToHash.reserve(this->members().size());
         for (auto e : this->members()) {
@@ -2194,7 +2195,8 @@ uint32_t ClassOrModule::hash(const GlobalState &gs) const {
                 continue;
             }
 
-            if (e.second.isMethod() && e.second.asMethodRef().data(gs)->ignoreInHashing(gs)) {
+            // if (e.second.isMethod() && e.second.asMethodRef().data(gs)->ignoreInHashing(gs)) {
+            if (e.second.isMethod()) {
                 continue;
             }
 
