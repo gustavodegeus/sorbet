@@ -45,6 +45,14 @@ enum RubyfmtStatus {
     RUBYFMT_NOT_IN_PATH = 127,
 };
 
+void DocumentFormattingTask::displayError(string errorMessage, unique_ptr<ResponseMessage> &response) {
+    // Write to both the response (which will get written to the LSP log) and
+    // to config.output (which will show a popup in the user's window)
+    response->error = make_unique<ResponseError>((int)LSPErrorCodes::RequestFailed, errorMessage);
+    config.output->write(make_unique<NotificationMessage>(
+        "2.0", LSPMethod::WindowShowMessage, make_unique<ShowMessageParams>(MessageType::Error, errorMessage)));
+}
+
 void DocumentFormattingTask::index(LSPIndexer &index) {
     auto response = make_unique<ResponseMessage>("2.0", id, LSPMethod::TextDocumentFormatting);
     if (!config.opts.lspDocumentFormatRubyfmtEnabled) {
@@ -69,6 +77,7 @@ void DocumentFormattingTask::index(LSPIndexer &index) {
         auto returnCode = process.retcode();
 
         std::string formattedContents(processResponse.first.buf.begin(), processResponse.first.buf.end());
+        std::string stderrOutput(processResponse.second.buf.begin(), processResponse.second.buf.end());
 
         switch (returnCode) {
             case RubyfmtStatus::OK:
@@ -80,30 +89,49 @@ void DocumentFormattingTask::index(LSPIndexer &index) {
                                                              make_unique<Position>(index.getFile(fref).lineCount(), 0)),
                                           formattedContents));
                 result = move(edits);
+                response->result = move(result);
                 break;
             case RubyfmtStatus::SYNTAX_ERROR:
+                displayError(fmt::format("`rubyfmt` could not format {} because it contains syntax errors.\n Error: {}",
+                                         index.getFile(fref).path(), stderrOutput),
+                             response);
+                break;
             case RubyfmtStatus::RIPPER_PARSE_FAILURE:
-                // Non-fatal error. Returns null for result.
-                config.logger->debug("Rubyfmt returned non-fatal error code `{}` for file `{}`", process.retcode(),
-                                     params->textDocument->uri);
+                displayError(fmt::format("`rubyfmt` failed to deserialize the parse tree from Ripper for {}.\n"
+                                         "This is valid Ruby but represents a bug in `rubyfmt`.",
+                                         index.getFile(fref).path()),
+                             response);
                 break;
             case RubyfmtStatus::IO_ERROR:
-                // Fatal error -- crash
-                Exception::raise("Rubyfmt reported an IO error");
+                displayError(fmt::format("`rubyfmt` encountered the following IO error while writing {}:\n"
+                                         "{}\n"
+                                         "This is likely a bug in `rubyfmt`.",
+                                         index.getFile(fref).path(), stderrOutput),
+                             response);
+                break;
             case RubyfmtStatus::OTHER_RUBY_ERROR:
-                // Fatal error -- crash
-                Exception::raise("Rubyfmt reported a Ruby error");
+                displayError(fmt::format("`rubyfmt` encountered the following ruby error while writing {}.\n"
+                                         "{}\n"
+                                         "This is likely a bug in `rubyfmt`.",
+                                         index.getFile(fref).path(), stderrOutput),
+                             response);
+                break;
             case RubyfmtStatus::INITIALIZE_ERROR:
-                // Fatal error -- crash
-                Exception::raise("Rubyfmt failed to initialize");
+                displayError(
+                    fmt::format("`rubyfmt` failed to initialize with the following error:\n{}\n", stderrOutput),
+                    response);
+                break;
             case RubyfmtStatus::RUBYFMT_NOT_IN_PATH:
-                Exception::raise("`rubyfmt` not found in the PATH.");
+                displayError("`rubyfmt` could not be found. Ensure that it is properly configured in your PATH.",
+                             response);
+                break;
             default:
-                Exception::raise("An unknown exception (exit code {}) occurred: {}", returnCode,
-                                 std::string(processResponse.second.buf.begin(), processResponse.second.buf.end()));
+                displayError(fmt::format("`rubyfmt` encountered an unknown exception (exit code {}):\n{}", returnCode,
+                                         stderrOutput),
+                             response);
+                break;
         }
     }
-    response->result = move(result);
     config.output->write(move(response));
     return;
 }
