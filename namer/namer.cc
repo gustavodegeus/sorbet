@@ -1945,6 +1945,7 @@ defineSymbols(core::GlobalState &gs, vector<SymbolFinderResult> allFoundDefiniti
             oldFoundDefinitionHashesForFiles.find(fref) == oldFoundDefinitionHashesForFiles.end()
                 ? make_optional<core::FoundDefinitionHashes>()
                 : std::move(oldFoundDefinitionHashesForFiles[fref]);
+        prodCounterAdd("types.input.founddefs.total", fileFoundDefinitions.names->definitions().size());
         SymbolDefiner symbolDefiner(move(fileFoundDefinitions.names), move(oldFoundDefinitionHashes));
         output.emplace_back(move(fileFoundDefinitions.tree));
         symbolDefiner.run(ctx);
