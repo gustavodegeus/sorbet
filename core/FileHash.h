@@ -86,6 +86,10 @@ struct SymbolHash {
     }
 };
 
+// TODO(jez) Some ideas:
+// - If we need to make this smaller, we have some options for bit packing.
+// - If we want things to compile faster, can build a separate FoundDefinitionRefForHashing structure
+//   (might end up doing this if we do the bit packing idea above)
 struct FoundDefinitionHash {
     const FoundDefinitionRef definition;
 
@@ -98,8 +102,18 @@ struct FoundDefinitionHash {
     // support taking the fast path for name changes.
     const FullNameHash hash;
 
-    FoundDefinitionHash(FoundDefinitionRef definition, FoundDefinitionRef owner, FullNameHash hash)
-        : definition(definition), owner(owner), hash(hash) {
+    // Only populated when `definition.kind() == Method`
+    const FoundMethod::Flags methodFlags;
+
+    FoundDefinitionHash(FoundDefinitionRef definition, FoundDefinitionRef owner)
+        : definition(definition), owner(owner), hash({}), methodFlags({}) {
+        ENFORCE(definition.kind() != core::FoundDefinitionRef::Kind::Method);
+        sanityCheck();
+    };
+
+    FoundDefinitionHash(FoundDefinitionRef definition, FoundDefinitionRef owner, FullNameHash hash,
+                        FoundMethod::Flags methodFlags)
+        : definition(definition), owner(owner), hash(hash), methodFlags(methodFlags) {
         sanityCheck();
     };
 
@@ -108,7 +122,7 @@ struct FoundDefinitionHash {
     // Debug string
     std::string toString() const;
 };
-CheckSize(FoundDefinitionHash, 12, 4);
+CheckSize(FoundDefinitionHash, 16, 4);
 
 using FoundDefinitionHashes = std::vector<FoundDefinitionHash>;
 

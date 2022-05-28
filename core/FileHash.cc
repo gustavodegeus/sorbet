@@ -70,6 +70,14 @@ void FoundDefinitionHash::sanityCheck() const {
         case FoundDefinitionRef::Kind::TypeMember:
             break;
     });
+    DEBUG_ONLY(if (definition.kind() != FoundDefinitionRef::Kind::Method) {
+        // Only methods are allowed to have method flags
+        ENFORCE(!methodFlags.isSelfMethod);
+        ENFORCE(!methodFlags.isRewriterSynthesized);
+        ENFORCE(!methodFlags.isAttrReader);
+        ENFORCE(!methodFlags.discardDef);
+        ENFORCE(!methodFlags.genericPropGetter);
+    });
 }
 
 string FoundDefinitionHash::toString() const {

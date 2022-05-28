@@ -31,19 +31,19 @@ struct SymbolFinderResult {
     unique_ptr<core::FoundDefinitions> names;
 };
 
-core::ClassOrModuleRef methodOwner(core::Context ctx, const ast::MethodDef::Flags &flags) {
-    ENFORCE(ctx.owner.exists() && ctx.owner != core::Symbols::todo());
-    auto owner = ctx.owner.enclosingClass(ctx);
-    if (owner == core::Symbols::root()) {
+core::ClassOrModuleRef methodOwner(core::Context ctx, core::SymbolRef owner, const ast::MethodDef::Flags &flags) {
+    ENFORCE(owner.exists() && owner != core::Symbols::todo());
+    auto enclosingClass = owner.enclosingClass(ctx);
+    if (enclosingClass == core::Symbols::root()) {
         // Root methods end up going on object
-        owner = core::Symbols::Object();
+        enclosingClass = core::Symbols::Object();
     }
 
     if (flags.isSelfMethod) {
-        owner = owner.data(ctx)->lookupSingletonClass(ctx);
+        enclosingClass = enclosingClass.data(ctx)->lookupSingletonClass(ctx);
     }
-    ENFORCE(owner.exists());
-    return owner;
+    ENFORCE(enclosingClass.exists());
+    return enclosingClass;
 }
 
 // Returns the SymbolRef corresponding to the class `self.class`, unless the
@@ -741,7 +741,7 @@ class SymbolDefiner {
     }
 
     core::MethodRef defineMethod(core::MutableContext ctx, const core::FoundMethod &method) {
-        auto owner = methodOwner(ctx, method.flags);
+        auto owner = methodOwner(ctx, ctx.owner, method.flags);
 
         // There are three symbols in play here, because there's:
         //
@@ -1122,10 +1122,11 @@ class SymbolDefiner {
 
         // Because a change to classes would have take the slow path, should be safe
         // to look up old owner in current foundDefs.
-        auto owner = getOwnerSymbol(oldDefHash.owner);
-        ENFORCE(owner.isClassOrModule());
+        auto ownerSymbol = getOwnerSymbol(oldDefHash.owner);
+        ENFORCE(ownerSymbol.isClassOrModule());
+        auto owner = methodOwner(ctx, ownerSymbol, oldDefHash.methodFlags);
         auto oldMethod = core::Symbols::noSymbol();
-        for (const auto &[memberName, memberSym] : owner.asClassOrModuleRef().data(ctx)->members()) {
+        for (const auto &[memberName, memberSym] : owner.data(ctx)->members()) {
             if (!memberSym.isMethod()) {
                 continue;
             }
@@ -1182,6 +1183,8 @@ public:
                         }
                         mangleRenameViaFullNameHash(ctx, oldDefHash);
                     }
+                    // TODO(jez) Probably some way to ENFORCE here that the loop exited via the
+                    // break, not the loop condition.
                 } else {
                     auto currentFullNameHash = core::FullNameHash(ctx, currentDef.method(foundDefs).name);
                     while (oldIdx < oldFoundHashes.size()) {
@@ -1230,8 +1233,18 @@ public:
             }
         }
 
-        if (oldFoundDefinitionHashes.has_value() && oldIdx != oldFoundDefinitionHashes.value().size()) {
+        if (oldFoundDefinitionHashes.has_value()) {
             // TODO(jez) Remove all the extra old methods
+            const auto &oldFoundHashes = oldFoundDefinitionHashes.value();
+            while (oldIdx < oldFoundHashes.size()) {
+                auto &oldDefHash = oldFoundHashes[oldIdx];
+                ctx.state.tracer().debug("Namer::runIncremental: oldIdx={}, oldDefHash kind()={}", oldIdx,
+                                         core::FoundDefinitionRef::kindToString(oldDefHash.definition.kind()));
+                oldIdx++;
+                ENFORCE(oldDefHash.definition.kind() == core::FoundDefinitionRef::Kind::Method,
+                        "Only extra methods should remain, if any");
+                mangleRenameViaFullNameHash(ctx, oldDefHash);
+            }
         }
 
         // TODO: Split up?
@@ -1260,25 +1273,25 @@ public:
                     // TODO(jez) Probably going to have to put the argument names and types into the hash
                     // TODO(jez) Maybe there's a way to get the localSymbolTableHash function to take care of this?
                     auto fullNameHash = core::FullNameHash(ctx, method.name);
-                    foundDefinitionHashesOut.emplace_back(ref, owner, fullNameHash);
+                    foundDefinitionHashesOut.emplace_back(ref, owner, fullNameHash, method.flags);
                     break;
                 }
                 case core::FoundDefinitionRef::Kind::Class: {
                     auto owner = ref.klass(foundDefs).owner;
                     auto invalid = core::FullNameHash();
-                    foundDefinitionHashesOut.emplace_back(ref, owner, invalid);
+                    foundDefinitionHashesOut.emplace_back(ref, owner);
                     break;
                 }
                 case core::FoundDefinitionRef::Kind::StaticField: {
                     auto owner = ref.staticField(foundDefs).owner;
                     auto invalid = core::FullNameHash();
-                    foundDefinitionHashesOut.emplace_back(ref, owner, invalid);
+                    foundDefinitionHashesOut.emplace_back(ref, owner);
                     break;
                 }
                 case core::FoundDefinitionRef::Kind::TypeMember: {
                     auto owner = ref.typeMember(foundDefs).owner;
                     auto invalid = core::FullNameHash();
-                    foundDefinitionHashesOut.emplace_back(ref, owner, invalid);
+                    foundDefinitionHashesOut.emplace_back(ref, owner);
                     break;
                 }
                 case core::FoundDefinitionRef::Kind::ClassRef:
@@ -1577,7 +1590,7 @@ public:
     ast::ExpressionPtr preTransformMethodDef(core::Context ctx, ast::ExpressionPtr tree) {
         auto &method = ast::cast_tree_nonnull<ast::MethodDef>(tree);
 
-        auto owner = methodOwner(ctx, method.flags);
+        auto owner = methodOwner(ctx, ctx.owner, method.flags);
         auto parsedArgs = ast::ArgParsing::parseArgs(method.args);
         auto sym = ctx.state.lookupMethodSymbolWithHash(owner, method.name, ast::ArgParsing::hashArgs(ctx, parsedArgs));
         if (!sym.exists()) {

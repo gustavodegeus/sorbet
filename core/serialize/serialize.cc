@@ -258,6 +258,7 @@ void SerializerImpl::pickle(Pickler &p, shared_ptr<const FileHash> fh) {
         p.putU4(fdh.definition.rawStorage());
         p.putU4(fdh.owner.rawStorage());
         p.putU4(fdh.hash._hashValue);
+        p.putU1(absl::bit_cast<uint8_t>(fdh.methodFlags));
     }
 }
 
@@ -297,7 +298,8 @@ unique_ptr<const FileHash> SerializerImpl::unpickleFileHash(UnPickler &p) {
         auto owner = FoundDefinitionRef::fromRaw(p.getU4());
         FullNameHash fullNameHash;
         fullNameHash._hashValue = p.getU4();
-        ret.foundDefinitionHashes.emplace_back(definition, owner, fullNameHash);
+        auto methodFlags = absl::bit_cast<FoundMethod::Flags>(p.getU1());
+        ret.foundDefinitionHashes.emplace_back(definition, owner, fullNameHash, methodFlags);
     }
     return make_unique<const FileHash>(move(ret));
 }
