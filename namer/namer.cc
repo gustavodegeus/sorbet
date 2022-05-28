@@ -1135,11 +1135,13 @@ class SymbolDefiner {
                 auto &oldDefHash = oldFoundHashes[oldIdx];
                 ctx.state.tracer().debug("Namer::runIncremental: oldIdx={}, oldDefHash kind()={}", oldIdx,
                                          core::FoundDefinitionRef::kindToString(oldDefHash.definition.kind()));
-                oldIdx++;
 
-                if (oldDefHash.definition.kind() != currentDef.kind()) {
+                if (oldDefHash.definition.kind() != core::FoundDefinitionRef::Kind::Method) {
                     break;
                 }
+                // Only increment when we're processing methods. This leaves oldIdx pointing at the
+                // first non-method in the outer loop, so that we can wait for currentIdx to catch up.
+                oldIdx++;
 
                 if (currentFullNameHash != oldDefHash.hash) {
                     mangleRenameViaFullNameHash(ctx, oldDefHash);
