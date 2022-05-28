@@ -1112,6 +1112,42 @@ class SymbolDefiner {
         return sym;
     }
 
+    // TODO(jez) Add a comment about how this is for LSP
+    // Mostly factored because it makes it easier to set a breakpoint here and show up in stack traces
+    void advanceOldFoundHashes(core::MutableContext ctx, core::FoundDefinitionRef currentDef, size_t &oldIdx) {
+        auto &oldFoundHashes = oldFoundDefinitionHashes.value();
+        if (currentDef.kind() != core::FoundDefinitionRef::Kind::Method) {
+            while (oldIdx < oldFoundHashes.size()) {
+                auto &oldDefHash = oldFoundHashes[oldIdx];
+                ctx.state.tracer().debug("Namer::runIncremental: oldIdx={}, oldDefHash kind()={}", oldIdx,
+                                         core::FoundDefinitionRef::kindToString(oldDefHash.definition.kind()));
+                oldIdx++;
+                if (oldDefHash.definition.kind() == currentDef.kind()) {
+                    break;
+                }
+                mangleRenameViaFullNameHash(ctx, oldDefHash);
+            }
+            // TODO(jez) Probably some way to ENFORCE here that the loop exited via the
+            // break, not the loop condition.
+        } else {
+            auto currentFullNameHash = core::FullNameHash(ctx, currentDef.method(foundDefs).name);
+            while (oldIdx < oldFoundHashes.size()) {
+                auto &oldDefHash = oldFoundHashes[oldIdx];
+                ctx.state.tracer().debug("Namer::runIncremental: oldIdx={}, oldDefHash kind()={}", oldIdx,
+                                         core::FoundDefinitionRef::kindToString(oldDefHash.definition.kind()));
+                oldIdx++;
+
+                if (oldDefHash.definition.kind() != currentDef.kind()) {
+                    break;
+                }
+
+                if (currentFullNameHash != oldDefHash.hash) {
+                    mangleRenameViaFullNameHash(ctx, oldDefHash);
+                }
+            }
+        }
+    }
+
     void mangleRenameViaFullNameHash(core::MutableContext ctx, const core::FoundDefinitionHash &oldDefHash) {
         ENFORCE(oldDefHash.definition.kind() == core::FoundDefinitionRef::Kind::Method,
                 "non-method symbol changed, should have taken slow path");
@@ -1169,39 +1205,7 @@ public:
             currentIdx++;
 
             if (oldFoundDefinitionHashes.has_value()) {
-                // TODO(jez) Factor this out to a function with a comment about how this is for LSP
-
-                auto &oldFoundHashes = oldFoundDefinitionHashes.value();
-                if (currentDef.kind() != core::FoundDefinitionRef::Kind::Method) {
-                    while (oldIdx < oldFoundHashes.size()) {
-                        auto &oldDefHash = oldFoundHashes[oldIdx];
-                        ctx.state.tracer().debug("Namer::runIncremental: oldIdx={}, oldDefHash kind()={}", oldIdx,
-                                                 core::FoundDefinitionRef::kindToString(oldDefHash.definition.kind()));
-                        oldIdx++;
-                        if (oldDefHash.definition.kind() == currentDef.kind()) {
-                            break;
-                        }
-                        mangleRenameViaFullNameHash(ctx, oldDefHash);
-                    }
-                    // TODO(jez) Probably some way to ENFORCE here that the loop exited via the
-                    // break, not the loop condition.
-                } else {
-                    auto currentFullNameHash = core::FullNameHash(ctx, currentDef.method(foundDefs).name);
-                    while (oldIdx < oldFoundHashes.size()) {
-                        auto &oldDefHash = oldFoundHashes[oldIdx];
-                        ctx.state.tracer().debug("Namer::runIncremental: oldIdx={}, oldDefHash kind()={}", oldIdx,
-                                                 core::FoundDefinitionRef::kindToString(oldDefHash.definition.kind()));
-                        oldIdx++;
-
-                        if (oldDefHash.definition.kind() != currentDef.kind()) {
-                            break;
-                        }
-
-                        if (currentFullNameHash != oldDefHash.hash) {
-                            mangleRenameViaFullNameHash(ctx, oldDefHash);
-                        }
-                    }
-                }
+                advanceOldFoundHashes(ctx, currentDef, oldIdx);
             }
 
             switch (currentDef.kind()) {
